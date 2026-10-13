@@ -1,4 +1,5 @@
 streamlit
+github3.py
 pandas
-openpyxl
 python-docx
+Pillow
