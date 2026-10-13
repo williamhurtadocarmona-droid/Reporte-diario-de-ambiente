@@ -1,5 +1,2 @@
 streamlit
-github3.py
-pandas
 python-docx
-Pillow
