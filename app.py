@@ -1,84 +1,155 @@
 import streamlit as st
+import datetime
 import pandas as pd
-from docx import Document
+from github import Github
 import io
+import docx
+from docx.shared import Inches, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from PIL import Image
 
-# Configuración inicial de la página
-st.set_page_config(
-    page_title="Generador de Documentos SENA",
-    page_icon="📄",
-    layout="centered"
-)
+# Configuración de página
+st.set_page_config(page_title="Control de Aseo - Taller", page_icon="🛠️", layout="centered")
 
-st.title("📄 Generador de Documentos Automatizado")
-st.write("Sube tu archivo de Excel, selecciona el aprendiz y genera el archivo de Word personalizado.")
+st.title("📸 Control Diario de Estado y Aseo")
+st.write("Registra el estado del taller al ingresar o salir para respaldar tu labor ante cualquier queja.")
 
-# 1. Cargar el archivo de Excel desde la interfaz web
-excel_file = st.file_uploader("1. Sube tu archivo de Excel (.xlsx)", type=["xlsx", "xls"])
-
-if excel_file is not None:
-    # Leer todas las hojas o la primera por defecto
-    df = pd.read_excel(excel_file)
-    st.success("¡Archivo de Excel cargado correctamente!")
+# Formulario Streamlit
+with st.form("form_aseo"):
+    fecha = st.date_input("Fecha de Inspección", datetime.date.today())
+    jornada = st.selectbox("Jornada", ["Mañana", "Tarde", "Noche"])
+    momento = st.radio("Momento", ["Ingreso (Inicio de jornada)", "Entrega (Fin de jornada)"])
+    instructor = st.text_input("Instructor a Cargo", value="William Santiago Hurtado Carmona")
     
-    # 2. Selección de la columna que identifica al Aprendiz
-    columnas = list(df.columns)
-    col_aprendiz = st.selectbox("2. Selecciona la columna que tiene los nombres de los Aprendices:", columnas)
+    st.subheader("Evidencias Fotográficas Obligatorias")
+    foto_canecas = st.file_uploader("1. Estado de Canecas y Basura", type=["jpg", "jpeg", "png"])
+    foto_maquinas = st.file_uploader("2. Estado de Máquinas (Tornos / Fresadoras / CNC)", type=["jpg", "jpeg", "png"])
+    foto_salon = st.file_uploader("3. Estado del Salón, Sillas y Suelo", type=["jpg", "jpeg", "png"])
     
-    if col_aprendiz:
-        # Filtrar lista única de aprendices eliminando valores vacíos
-        lista_aprendices = df[col_aprendiz].dropna().unique()
-        
-        # 3. Menú desplegable para seleccionar un Aprendiz específico
-        aprendiz_seleccionado = st.selectbox("3. Selecciona el Aprendiz a procesar:", lista_aprendices)
-        
-        if aprendiz_seleccionado:
-            # Obtener la fila de datos correspondiente al aprendiz seleccionado
-            fila_datos = df[df[col_aprendiz] == aprendiz_seleccionado].iloc[0]
+    observaciones = st.text_area("Observaciones o Novedades (Ej: Sillas desordenadas, residuos encontrados, etc.)")
+    
+    submitted = st.form_submit_button("Guardar Registro y Generar Informe Word")
+
+if submitted:
+    if not (foto_canecas and foto_maquinas and foto_salon):
+        st.error("⚠️ Debes subir obligatoriamente las 3 fotografías.")
+    else:
+        try:
+            # 1. Conexión segura con GitHub Secrets
+            github_token = st.secrets["GITHUB_TOKEN"]
+            repo_name = st.secrets["REPO_NAME"]
             
-            # Mostrar los datos detectados en una tarjeta desplegable
-            with st.expander("Ver datos detectados de este registro"):
-                for col in columnas:
-                    st.write(f"**{col}:** {fila_datos[col]}")
+            g = Github(github_token)
+            repo = g.get_repo(repo_name)
             
-            # 4. Botón para procesar y generar el documento
-            if st.button("🚀 Generar Documento de Word"):
-                try:
-                    # Abrir la plantilla de Word cargada en el repositorio
-                    doc = Document("plantilla.docx")
-                    
-                    # Crear diccionario dinámico con todas las columnas del Excel
-                    # Reemplazará {{NOMBRE_COLUMNA}} por el valor de la fila
-                    reemplazos = {f"{{{{{col}}}}}" : str(fila_datos[col]) for col in columnas}
-                    
-                    # Reemplazar texto en los párrafos normales
-                    for p in doc.paragraphs:
-                        for tag, valor in reemplazos.items():
-                            if tag in p.text:
-                                p.text = p.text.replace(tag, valor)
-                    
-                    # Reemplazar texto dentro de las tablas (si la plantilla contiene tablas)
-                    for tabla in doc.tables:
-                        for fila_tabla in tabla.rows:
-                            for celda in fila_tabla.cells:
-                                for p in celda.paragraphs:
-                                    for tag, valor in reemplazos.items():
-                                        if tag in p.text:
-                                            p.text = p.text.replace(tag, valor)
-                    
-                    # Guardar el documento en la memoria temporal (Buffer)
-                    output = io.BytesIO()
-                    doc.save(output)
-                    output.seek(0)
-                    
-                    # Botón de descarga para el usuario
-                    st.download_button(
-                        label="📥 Descargar Documento Generado",
-                        data=output,
-                        file_name=f"Documento_{aprendiz_seleccionado}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-                    st.success("¡Documento generado con éxito!")
-                    
-                except FileNotFoundError:
-                    st.error("Error: No se encontró el archivo 'plantilla.docx' en el repositorio de GitHub. Asegúrate de haberlo subido con ese nombre exacto.")
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            prefix = f"{fecha}_{jornada}_{momento.split()[0]}".lower()
+            
+            fotos = {
+                "canecas": foto_canecas,
+                "maquinas": foto_maquinas,
+                "salon": foto_salon
+            }
+            
+            urls_fotos = {}
+            for clave, archivo_foto in fotos.items():
+                ruta_github = f"evidencias/{fecha}/{prefix}_{clave}_{timestamp}.png"
+                contenido = archivo_foto.read()
+                archivo_foto.seek(0)
+                
+                repo.create_file(
+                    path=ruta_github,
+                    message=f"Subir evidencia {clave} - {fecha}",
+                    content=contenido
+                )
+                urls_fotos[clave] = f"https://raw.githubusercontent.com/{repo_name}/main/{ruta_github}"
+
+            # 2. Guardar registro en el CSV general
+            nuevo_registro = {
+                "Fecha": [str(fecha)],
+                "Jornada": [jornada],
+                "Momento": [momento],
+                "Instructor": [instructor],
+                "Observaciones": [observaciones],
+                "Foto_Canecas": [urls_fotos["canecas"]],
+                "Foto_Maquinas": [urls_fotos["maquinas"]],
+                "Foto_Salon": [urls_fotos["salon"]]
+            }
+            
+            df_nuevo = pd.DataFrame(nuevo_registro)
+            try:
+                contents = repo.get_contents("registros.csv")
+                df_existente = pd.read_csv(io.StringIO(contents.decoded_content.decode('utf-8')))
+                df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+                repo.update_file(contents.path, f"Actualizar registros {fecha}", df_final.to_csv(index=False), contents.sha)
+            except Exception:
+                repo.create_file("registros.csv", f"Crear registros.csv {fecha}", df_nuevo.to_csv(index=False))
+
+            st.success("✅ ¡Evidencias guardadas exitosamente en GitHub!")
+
+            # 3. Descargar tu plantilla Word desde GitHub y rellenarla automáticamente
+            plantilla_file = repo.get_contents("Formato_Entrada_y_salida_Taller.docx")
+            plantilla_bytes = io.BytesIO(plantilla_file.decoded_content)
+            
+            doc = docx.Document(plantilla_bytes)
+
+            # Rellenar datos clave buscando texto genérico o reemplazando por párrafos/tablas
+            # Recorrer tablas para inyectar los datos limpios si coinciden
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        texto = cell.text
+                        if "DD / MM / AAAA" in texto:
+                            cell.text = f"Fecha: {str(fecha)}"
+                        elif "Jornada" in texto:
+                            cell.text = f"Jornada: {jornada} ({momento})"
+                        elif "Instructor" in texto:
+                            cell.text = f"Instructor Responsable: {instructor}"
+
+            # Añadir observaciones y fotos al final del documento de forma ordenada
+            doc.add_paragraph().paragraph_format.space_after = Pt(6)
+            p_obs = doc.add_paragraph()
+            r_ot = p_obs.add_run("Observaciones / Novedades Registradas:\n")
+            r_ot.bold = True
+            r_ot.font.name = "Calibri"
+            r_ot.font.size = Pt(11)
+            
+            r_ox = p_obs.add_run(observaciones if observaciones else "Ninguna novedad reportada.")
+            r_ox.font.name = "Calibri"
+            r_ox.font.size = Pt(10)
+
+            doc.add_paragraph().paragraph_format.space_after = Pt(10)
+
+            # Inserción de las Fotos
+            p_f = doc.add_paragraph()
+            r_f = p_f.add_run("REGISTRO FOTOGRÁFICO DE EVIDENCIAS")
+            r_f.bold = True
+            r_f.font.name = "Calibri"
+            r_f.font.size = Pt(12)
+
+            for label, uploaded_file in [("1. Estado de Canecas y Basura", foto_canecas), 
+                                         ("2. Estado de Máquinas", foto_maquinas), 
+                                         ("3. Estado del Salón y Sillas", foto_salon)]:
+                
+                doc.add_paragraph().add_run(label).bold = True
+                img = Image.open(uploaded_file)
+                temp_path = f"temp_{label[0]}.png"
+                img.save(temp_path)
+                doc.add_picture(temp_path, width=Inches(4.3))
+                doc.add_paragraph().paragraph_format.space_after = Pt(6)
+
+            # Preparar descarga del documento Word modificado
+            doc_io = io.BytesIO()
+            doc.save(doc_io)
+            doc_io.seek(0)
+
+            st.download_button(
+                label="📥 Descargar Informe en Word con Fotos",
+                data=doc_io,
+                file_name=f"Informe_Aseo_{fecha}_{jornada}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+        except Exception as e:
+            st.error(f"❌ Error al procesar: {e}")
