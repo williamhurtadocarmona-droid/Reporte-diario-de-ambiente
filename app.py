@@ -60,59 +60,56 @@ with st.form("reporte_form"):
 
 if submitted:
   try:
-    # Nombre exacto del archivo que está en tu repositorio de GitHub
     template_path = "Formato_Entrada y salida_Taller.docx"
 
     if not os.path.exists(template_path):
       st.error(
           f"No se encontró el archivo '{template_path}' en el repositorio."
-          " Asegúrate de que tenga ese nombre exacto en GitHub."
       )
     else:
       doc = DocxTemplate(template_path)
 
-      # Validación limpia de casillas para la jornada
+      # Validación de casillas
       m_chk = "X" if jornada_opcion == "Mañana" else " "
       t_chk = "X" if jornada_opcion == "Tarde" else " "
       h_chk = "X" if jornada_opcion == "24 H" else " "
       jornada_texto = f"[{m_chk}] Mañana   [{t_chk}] Tarde   [{h_chk}] 24 H"
 
-      # Validación limpia de casillas para el momento de inspección
       ing_chk = "X" if momento_opcion == "Ingreso (Inicio)" else " "
       ent_chk = "X" if momento_opcion == "Entrega (Fin de jornada)" else " "
       momento_texto = f"[{ing_chk}] Ingreso (Inicio)   [{ent_chk}] Entrega (Fin de jornada)"
 
-      # Diccionario con las etiquetas exactas de tu Word
+      # Diccionario con etiquetas simplificadas (sin espacios)
       context = {
-          "Fecha": fecha_inspeccion.strftime("%d / %m / %Y"),
-          "Jornada": jornada_texto,
-          "Inicio o fin": momento_texto,
-          "Ingresa observaciones o deja en blanco": (
+          "fecha": fecha_inspeccion.strftime("%d / %m / %Y"),
+          "jornada": jornada_texto,
+          "momento": momento_texto,
+          "observaciones": (
               observaciones if observaciones else "Sin novedades reportadas."
           ),
       }
 
-      # Manejo seguro de imágenes
+      # Manejo de imágenes con etiquetas limpias
       if foto_canecas is not None:
-        context["fotos Canecas"] = InlineImage(
+        context["foto_canecas"] = InlineImage(
             doc, BytesIO(foto_canecas.getvalue()), width=Inches(3.5)
         )
       else:
-        context["fotos Canecas"] = "[ Sin fotografía adjunta ]"
+        context["foto_canecas"] = "[ Sin fotografía adjunta ]"
 
       if foto_maquinas is not None:
-        context["fotos maquinas"] = InlineImage(
+        context["foto_maquinas"] = InlineImage(
             doc, BytesIO(foto_maquinas.getvalue()), width=Inches(3.5)
         )
       else:
-        context["fotos maquinas"] = "[ Sin fotografía adjunta ]"
+        context["foto_maquinas"] = "[ Sin fotografía adjunta ]"
 
       if foto_salon is not None:
-        context["fotos Aula"] = InlineImage(
+        context["foto_salon"] = InlineImage(
             doc, BytesIO(foto_salon.getvalue()), width=Inches(3.5)
         )
       else:
-        context["fotos Aula"] = "[ Sin fotografía adjunta ]"
+        context["foto_salon"] = "[ Sin fotografía adjunta ]"
 
       # Renderizar la plantilla
       doc.render(context)
@@ -122,7 +119,7 @@ if submitted:
       doc.save(buffer)
       buffer.seek(0)
 
-      st.success("¡Reporte generado perfectamente!")
+      st.success("¡Reporte generado perfectamente sin errores!")
       st.download_button(
           label="📥 Descargar Formato Rellenado (.docx)",
           data=buffer,
