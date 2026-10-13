@@ -60,27 +60,24 @@ with st.form("reporte_form"):
 
 if submitted:
   try:
-    # Asegúrate de usar el nombre exacto de tu archivo en el repositorio
     template_path = "Formato_Entrada y salida_Taller_2.docx"
     if not os.path.exists(template_path):
       st.error(f"No se encontró el archivo '{template_path}' en el repositorio.")
     else:
       doc = DocxTemplate(template_path)
 
-      # Preparar formato visual de las opciones de casillas
-      jornada_texto = (
-          f"[{'X' if jornada_opcion == 'Mañana' else ' '}] Mañana   "
-          f"[{'X' if jornada_opcion == 'Tarde' else ' '}] Tarde   "
-          f"[{'X' if jornada_opcion == '24 H' else ' '}] 24 H"
-      )
+      # Validación limpia de casillas para la jornada
+      m_chk = "X" if jornada_opcion == "Mañana" else " "
+      t_chk = "X" if jornada_opcion == "Tarde" else " "
+      h_chk = "X" if jornada_opcion == "24 H" else " "
+      jornada_texto = f"[{m_chk}] Mañana   [{t_chk}] Tarde   [{h_chk}] 24 H"
 
-      momento_texto = (
-          f"[{'X' if momento_opcion == 'Ingreso (Inicio)' else ' '}] Ingreso"
-          f" (Inicio)   [{'X' if momento_opcion == 'Entrega (Fin de jornada)' else"
-          f" ' '}] Entrega (Fin de jornada)"
-      )
+      # Validación limpia de casillas para el momento de inspección
+      ing_chk = "X" if momento_opcion == "Ingreso (Inicio)" else " "
+      ent_chk = "X" if momento_opcion == "Entrega (Fin de jornada)" else " "
+      momento_texto = f"[{ing_chk}] Ingreso (Inicio)   [{ent_chk}] Entrega (Fin de jornada)"
 
-      # Diccionario que hace match exacto con las etiquetas {{ }} del Word
+      # Diccionario con las etiquetas exactas de tu Word
       context = {
           "Fecha": fecha_inspeccion.strftime("%d / %m / %Y"),
           "Jornada": jornada_texto,
@@ -90,7 +87,7 @@ if submitted:
           ),
       }
 
-      # Manejo seguro de imágenes con InlineImage
+      # Manejo seguro de imágenes
       if foto_canecas is not None:
         context["fotos Canecas"] = InlineImage(
             doc, BytesIO(foto_canecas.getvalue()), width=Inches(3.5)
@@ -112,15 +109,15 @@ if submitted:
       else:
         context["fotos Aula"] = "[ Sin fotografía adjunta ]"
 
-      # Reemplaza automáticamente las etiquetas del Word con los datos y fotos
+      # Renderizar la plantilla
       doc.render(context)
 
-      # Guardar en memoria para la descarga
+      # Guardar en memoria para descarga
       buffer = BytesIO()
       doc.save(buffer)
       buffer.seek(0)
 
-      st.success("¡Reporte generado perfectamente con tus etiquetas!")
+      st.success("¡Reporte generado perfectamente!")
       st.download_button(
           label="📥 Descargar Formato Rellenado (.docx)",
           data=buffer,
