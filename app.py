@@ -60,9 +60,14 @@ with st.form("reporte_form"):
 
 if submitted:
   try:
-    template_path = "Formato_Entrada y salida_Taller_2.docx"
+    # Nombre exacto del archivo que está en tu repositorio de GitHub
+    template_path = "Formato_Entrada y salida_Taller.docx"
+
     if not os.path.exists(template_path):
-      st.error(f"No se encontró el archivo '{template_path}' en el repositorio.")
+      st.error(
+          f"No se encontró el archivo '{template_path}' en el repositorio."
+          " Asegúrate de que tenga ese nombre exacto en GitHub."
+      )
     else:
       doc = DocxTemplate(template_path)
 
