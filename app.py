@@ -1,24 +1,31 @@
 import streamlit as st
 import datetime
 import pandas as pd
-import requests
-import base64
+requests = __import__('requests')
+base64 = __import__('base64')
 import io
 import docx
 from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from PIL import Image
 
 # Configuración de página
 st.set_page_config(page_title="Control de Aseo - Taller", page_icon="🛠️", layout="centered")
 
-st.title("📸 Control Diario de Estado y Aseo")
-st.write("Registra el estado del taller al ingresar o salir para respaldar tu labor.")
+st.title("📸 Control Diario de Estado y Aseo - Taller")
+st.write("Registra el estado del taller para respaldar tu labor.")
 
 # Formulario Streamlit
 with st.form("form_aseo"):
     fecha = st.date_input("Fecha de Inspección", datetime.date.today())
-    jornada = st.selectbox("Jornada", ["Mañana", "Tarde", "Noche"])
+    
+    # Jornada actualizada incluyendo 24 H
+    jornada = st.selectbox("Jornada", [
+        "24 H", 
+        "Mañana", 
+        "Tarde", 
+        "Noche"
+    ])
+    
     momento = st.radio("Momento", ["Ingreso (Inicio de jornada)", "Entrega (Fin de jornada)"])
     instructor = st.text_input("Instructor a Cargo", value="William Santiago Hurtado Carmona")
     
@@ -38,7 +45,7 @@ if submitted:
         try:
             # Credenciales desde los Secrets de Streamlit
             GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-            REPO_NAME = st.secrets["REPO_NAME"] # Formato: "usuario/repositorio"
+            REPO_NAME = st.secrets["REPO_NAME"]
             
             headers = {
                 "Authorization": f"token {GITHUB_TOKEN}",
@@ -79,7 +86,7 @@ if submitted:
                 plantilla_bytes = io.BytesIO(resp_plantilla.content)
                 doc = docx.Document(plantilla_bytes)
             else:
-                doc = docx.Document() # Plan B si no la encuentra
+                doc = docx.Document()
 
             # Rellenar datos en el documento
             for table in doc.tables:
@@ -133,7 +140,7 @@ if submitted:
             st.download_button(
                 label="📥 Descargar Informe en Word con Fotos",
                 data=doc_io,
-                file_name=f"Informe_Aseo_{fecha}_{jornada}.docx",
+                file_name=f"Informe_Aseo_{jornada}_{fecha}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
 
