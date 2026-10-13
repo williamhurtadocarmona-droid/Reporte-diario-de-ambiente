@@ -1,19 +1,19 @@
 import streamlit as st
 import datetime
 import pandas as pd
-from github import Github
+import requests
+import base64
 import io
 import docx
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from PIL import Image
 
 # Configuración de página
 st.set_page_config(page_title="Control de Aseo - Taller", page_icon="🛠️", layout="centered")
 
 st.title("📸 Control Diario de Estado y Aseo")
-st.write("Registra el estado del taller al ingresar o salir para respaldar tu labor ante cualquier queja.")
+st.write("Registra el estado del taller al ingresar o salir para respaldar tu labor.")
 
 # Formulario Streamlit
 with st.form("form_aseo"):
@@ -36,12 +36,14 @@ if submitted:
         st.error("⚠️ Debes subir obligatoriamente las 3 fotografías.")
     else:
         try:
-            # 1. Conexión segura con GitHub Secrets
-            github_token = st.secrets["GITHUB_TOKEN"]
-            repo_name = st.secrets["REPO_NAME"]
+            # Credenciales desde los Secrets de Streamlit
+            GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+            REPO_NAME = st.secrets["REPO_NAME"] # Formato: "usuario/repositorio"
             
-            g = Github(github_token)
-            repo = g.get_repo(repo_name)
+            headers = {
+                "Authorization": f"token {GITHUB_TOKEN}",
+                "Accept": "application/vnd.github.v3+json"
+            }
             
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             prefix = f"{fecha}_{jornada}_{momento.split()[0]}".lower()
@@ -55,47 +57,31 @@ if submitted:
             urls_fotos = {}
             for clave, archivo_foto in fotos.items():
                 ruta_github = f"evidencias/{fecha}/{prefix}_{clave}_{timestamp}.png"
-                contenido = archivo_foto.read()
+                contenido_bytes = archivo_foto.read()
                 archivo_foto.seek(0)
                 
-                repo.create_file(
-                    path=ruta_github,
-                    message=f"Subir evidencia {clave} - {fecha}",
-                    content=contenido
-                )
-                urls_fotos[clave] = f"https://raw.githubusercontent.com/{repo_name}/main/{ruta_github}"
+                content_encoded = base64.b64encode(contenido_bytes).decode("utf-8")
+                
+                url_api = f"https://api.github.com/repos/{REPO_NAME}/contents/{ruta_github}"
+                payload = {
+                    "message": f"Subir evidencia {clave} - {fecha}",
+                    "content": content_encoded
+                }
+                
+                resp = requests.put(url_api, json=payload, headers=headers)
+                urls_fotos[clave] = f"https://raw.githubusercontent.com/{REPO_NAME}/main/{ruta_github}"
 
-            # 2. Guardar registro en el CSV general
-            nuevo_registro = {
-                "Fecha": [str(fecha)],
-                "Jornada": [jornada],
-                "Momento": [momento],
-                "Instructor": [instructor],
-                "Observaciones": [observaciones],
-                "Foto_Canecas": [urls_fotos["canecas"]],
-                "Foto_Maquinas": [urls_fotos["maquinas"]],
-                "Foto_Salon": [urls_fotos["salon"]]
-            }
+            # Descargar la plantilla Word directamente desde GitHub
+            url_plantilla = f"https://raw.githubusercontent.com/{REPO_NAME}/main/Formato_Entrada_y_salida_Taller.docx"
+            resp_plantilla = requests.get(url_plantilla, headers=headers)
             
-            df_nuevo = pd.DataFrame(nuevo_registro)
-            try:
-                contents = repo.get_contents("registros.csv")
-                df_existente = pd.read_csv(io.StringIO(contents.decoded_content.decode('utf-8')))
-                df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
-                repo.update_file(contents.path, f"Actualizar registros {fecha}", df_final.to_csv(index=False), contents.sha)
-            except Exception:
-                repo.create_file("registros.csv", f"Crear registros.csv {fecha}", df_nuevo.to_csv(index=False))
+            if resp_plantilla.status_code == 200:
+                plantilla_bytes = io.BytesIO(resp_plantilla.content)
+                doc = docx.Document(plantilla_bytes)
+            else:
+                doc = docx.Document() # Plan B si no la encuentra
 
-            st.success("✅ ¡Evidencias guardadas exitosamente en GitHub!")
-
-            # 3. Descargar tu plantilla Word desde GitHub y rellenarla automáticamente
-            plantilla_file = repo.get_contents("Formato_Entrada_y_salida_Taller.docx")
-            plantilla_bytes = io.BytesIO(plantilla_file.decoded_content)
-            
-            doc = docx.Document(plantilla_bytes)
-
-            # Rellenar datos clave buscando texto genérico o reemplazando por párrafos/tablas
-            # Recorrer tablas para inyectar los datos limpios si coinciden
+            # Rellenar datos en el documento
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
@@ -107,7 +93,7 @@ if submitted:
                         elif "Instructor" in texto:
                             cell.text = f"Instructor Responsable: {instructor}"
 
-            # Añadir observaciones y fotos al final del documento de forma ordenada
+            # Añadir observaciones y fotos al informe Word
             doc.add_paragraph().paragraph_format.space_after = Pt(6)
             p_obs = doc.add_paragraph()
             r_ot = p_obs.add_run("Observaciones / Novedades Registradas:\n")
@@ -121,7 +107,6 @@ if submitted:
 
             doc.add_paragraph().paragraph_format.space_after = Pt(10)
 
-            # Inserción de las Fotos
             p_f = doc.add_paragraph()
             r_f = p_f.add_run("REGISTRO FOTOGRÁFICO DE EVIDENCIAS")
             r_f.bold = True
@@ -139,11 +124,12 @@ if submitted:
                 doc.add_picture(temp_path, width=Inches(4.3))
                 doc.add_paragraph().paragraph_format.space_after = Pt(6)
 
-            # Preparar descarga del documento Word modificado
+            # Preparar descarga del documento Word
             doc_io = io.BytesIO()
             doc.save(doc_io)
             doc_io.seek(0)
 
+            st.success("✅ ¡Evidencias subidas a GitHub correctamente!")
             st.download_button(
                 label="📥 Descargar Informe en Word con Fotos",
                 data=doc_io,
