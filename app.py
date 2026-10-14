@@ -39,9 +39,12 @@ with st.form("reporte_form"):
       ),
   )
 
-  st.markdown("### 📷 Registro Fotográfico de Evidencias (Puedes subir varias)")
+  st.markdown("### 📷 Registro Fotográfico de Evidencias")
+  st.info(
+      "💡 Tip: Mantén presionada la tecla **Ctrl** (o **Cmd** en Mac) para"
+      " seleccionar varias imágenes en cada apartado."
+  )
 
-  # Permitir múltiples archivos con accept_multiple_files=True
   fotos_canecas = st.file_uploader(
       "1. Estado de Canecas y Basura General",
       type=["png", "jpg", "jpeg"],
@@ -84,19 +87,7 @@ if submitted:
       ent_chk = "X" if momento_opcion == "Entrega (Fin de jornada)" else " "
       momento_texto = f"[{ing_chk}] Ingreso (Inicio)   [{ent_chk}] Entrega (Fin de jornada)"
 
-      # Función para procesar listas de imágenes múltiples
-      def procesar_lista_imagenes(archivos):
-        if not archivos:
-          return "[ Sin fotografías adjuntas ]"
-        lista_imgs = []
-        for archivo in archivos:
-          img_inline = InlineImage(
-              doc, BytesIO(archivo.getvalue()), width=Inches(3.5)
-          )
-          lista_imgs.append(img_inline)
-        return lista_imgs
-
-      # Diccionario con los datos y las listas de imágenes
+      # Diccionario base con los textos
       context = {
           "fecha": fecha_inspeccion.strftime("%d / %m / %Y"),
           "jornada": jornada_texto,
@@ -104,20 +95,50 @@ if submitted:
           "observaciones": (
               observaciones if observaciones else "Sin novedades reportadas."
           ),
-          "foto_canecas": procesar_lista_imagenes(fotos_canecas),
-          "foto_maquinas": procesar_lista_imagenes(fotos_maquinas),
-          "foto_salon": procesar_lista_imagenes(fotos_salon),
       }
 
-      # Renderizar la plantilla (Jinja2 colocará todas las fotos de la lista automáticamente)
+      # Función segura para insertar múltiples imágenes pasando por cada párrafo del documento
+      def insertar_multiples_fotos(tag_name, lista_archivos):
+        if not lista_archivos:
+          doc.replace_string(tag_name, "[ Sin fotografía adjunta ]")
+          return
+
+        # Buscamos el párrafo donde está la etiqueta y reemplazamos con la primera imagen,
+        # y añadimos las demás justo debajo de manera limpia.
+        for p in doc.paragraphs:
+          if tag_name in p.text:
+            p.text = p.text.replace(
+                tag_name, ""
+            )  # Limpiamos el texto de la etiqueta
+            run = p.add_run()
+            for i, archivo in enumerate(lista_archivos):
+              if i > 0:
+                # Añadir un salto de línea para las siguientes imágenes
+                p_nuevo = doc.add_paragraph()
+                run_nuevo = p_nuevo.add_run()
+                InlineImage(
+                    doc, BytesIO(archivo.getvalue()), width=Inches(3.5)
+                )._add_to_run(run_nuevo)
+              else:
+                InlineImage(
+                    doc, BytesIO(archivo.getvalue()), width=Inches(3.5)
+                )._add_to_run(run)
+            break
+
+      # Renderizamos textos primero
       doc.render(context)
+
+      # Insertamos las imágenes múltiples de forma segura por etiqueta
+      insertar_multiples_fotos("{{foto_canecas}}", fotos_canecas)
+      insertar_multiples_fotos("{{foto_maquinas}}", fotos_maquinas)
+      insertar_multiples_fotos("{{foto_salon}}", fotos_salon)
 
       # Guardar en memoria para descarga
       buffer = BytesIO()
       doc.save(buffer)
       buffer.seek(0)
 
-      st.success("¡Reporte generado con múltiples imágenes con éxito!")
+      st.success("¡Reporte generado con éxito y sin errores de formato!")
       st.download_button(
           label="📥 Descargar Formato Rellenado (.docx)",
           data=buffer,
@@ -130,4 +151,4 @@ if submitted:
       )
 
   except Exception as e:
-    st.error(f"Ocurrió un error al procesar la plantilla: {e}")
+    st.error(f"Ocurrió un error al procesar el archivo: {e}")
