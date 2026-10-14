@@ -39,20 +39,25 @@ with st.form("reporte_form"):
       ),
   )
 
-  st.markdown("### 📷 Registro Fotográfico de Evidencias")
-  foto_canecas = st.file_uploader(
+  st.markdown("### 📷 Registro Fotográfico de Evidencias (Puedes subir varias)")
+
+  # Permitir múltiples archivos con accept_multiple_files=True
+  fotos_canecas = st.file_uploader(
       "1. Estado de Canecas y Basura General",
       type=["png", "jpg", "jpeg"],
+      accept_multiple_files=True,
       key="canecas",
   )
-  foto_maquinas = st.file_uploader(
+  fotos_maquinas = st.file_uploader(
       "2. Estado de Máquinas (Tornos / Fresadoras / CNC)",
       type=["png", "jpg", "jpeg"],
+      accept_multiple_files=True,
       key="maquinas",
   )
-  foto_salon = st.file_uploader(
+  fotos_salon = st.file_uploader(
       "3. Estado del Salón, Sillas y Suelo",
       type=["png", "jpg", "jpeg"],
+      accept_multiple_files=True,
       key="salon",
   )
 
@@ -79,7 +84,19 @@ if submitted:
       ent_chk = "X" if momento_opcion == "Entrega (Fin de jornada)" else " "
       momento_texto = f"[{ing_chk}] Ingreso (Inicio)   [{ent_chk}] Entrega (Fin de jornada)"
 
-      # Diccionario con etiquetas simplificadas (sin espacios)
+      # Función para procesar listas de imágenes múltiples
+      def procesar_lista_imagenes(archivos):
+        if not archivos:
+          return "[ Sin fotografías adjuntas ]"
+        lista_imgs = []
+        for archivo in archivos:
+          img_inline = InlineImage(
+              doc, BytesIO(archivo.getvalue()), width=Inches(3.5)
+          )
+          lista_imgs.append(img_inline)
+        return lista_imgs
+
+      # Diccionario con los datos y las listas de imágenes
       context = {
           "fecha": fecha_inspeccion.strftime("%d / %m / %Y"),
           "jornada": jornada_texto,
@@ -87,31 +104,12 @@ if submitted:
           "observaciones": (
               observaciones if observaciones else "Sin novedades reportadas."
           ),
+          "foto_canecas": procesar_lista_imagenes(fotos_canecas),
+          "foto_maquinas": procesar_lista_imagenes(fotos_maquinas),
+          "foto_salon": procesar_lista_imagenes(fotos_salon),
       }
 
-      # Manejo de imágenes con etiquetas limpias
-      if foto_canecas is not None:
-        context["foto_canecas"] = InlineImage(
-            doc, BytesIO(foto_canecas.getvalue()), width=Inches(3.5)
-        )
-      else:
-        context["foto_canecas"] = "[ Sin fotografía adjunta ]"
-
-      if foto_maquinas is not None:
-        context["foto_maquinas"] = InlineImage(
-            doc, BytesIO(foto_maquinas.getvalue()), width=Inches(3.5)
-        )
-      else:
-        context["foto_maquinas"] = "[ Sin fotografía adjunta ]"
-
-      if foto_salon is not None:
-        context["foto_salon"] = InlineImage(
-            doc, BytesIO(foto_salon.getvalue()), width=Inches(3.5)
-        )
-      else:
-        context["foto_salon"] = "[ Sin fotografía adjunta ]"
-
-      # Renderizar la plantilla
+      # Renderizar la plantilla (Jinja2 colocará todas las fotos de la lista automáticamente)
       doc.render(context)
 
       # Guardar en memoria para descarga
@@ -119,7 +117,7 @@ if submitted:
       doc.save(buffer)
       buffer.seek(0)
 
-      st.success("¡Reporte generado perfectamente sin errores!")
+      st.success("¡Reporte generado con múltiples imágenes con éxito!")
       st.download_button(
           label="📥 Descargar Formato Rellenado (.docx)",
           data=buffer,
