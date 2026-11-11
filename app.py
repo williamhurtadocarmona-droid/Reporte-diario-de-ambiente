@@ -87,10 +87,10 @@ if submitted:
       ent_chk = "X" if momento_opcion == "Entrega (Fin de jornada)" else " "
       momento_texto = f"[{ing_chk}] Ingreso (Inicio)   [{ent_chk}] Entrega (Fin de jornada)"
 
-      # Función para preparar listas de InlineImage de forma segura
+     # Función para preparar listas de InlineImage para bucles
       def preparar_fotos(archivos):
         if not archivos:
-          return "[ Sin fotografía adjunta ]"
+          return []  # Devuelve una lista vacía para que el bucle no falle
         lista_imgs = []
         for archivo in archivos:
           lista_imgs.append(
@@ -98,7 +98,8 @@ if submitted:
           )
         return lista_imgs
 
-      # Diccionario completo para renderizar texto e imágenes
+
+      # Diccionario completo para renderizar texto y listas de imágenes
       context = {
           "fecha": fecha_inspeccion.strftime("%d / %m / %Y"),
           "jornada": jornada_texto,
